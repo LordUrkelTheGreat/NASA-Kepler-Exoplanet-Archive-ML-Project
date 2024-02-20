@@ -1,23 +1,25 @@
 # import libraries
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
-import math
-from sklearn.metrics import mean_absolute_error
-from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import StratifiedKFold
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+from sklearn import metrics
+from sklearn.metrics import mean_squared_error, precision_score, confusion_matrix, accuracy_score
 
 
-"""
-This function will read the Kepler Exoplanet Dataset, preprocess the data, and split the
-data into features and targets
-"""
-def extract_data():
+
+# read the Kepler Exoplanet Dataset, preprocess the data, and split the data into features and targets
+def extract_all_kepler_data():
     # load in the kepler exoplanet dataset
     #kepler_exoplanet_dataset = pd.read_csv('cumulative_2024.02.18_16.53.59.csv', on_bad_lines = 'skip')
     kepler_exoplanet_dataset = pd.read_csv('Kepler_Exoplanet_Archive.csv')
@@ -202,38 +204,219 @@ def extract_data():
     #print("Number of NaN values per column:\n", copy_kepler.isnull().sum(), "\n")
 
     # show the names of all columns
-    print(list(copy_kepler.columns), "\n")
+    #print(list(copy_kepler.columns), "\n")
 
+    #for column in copy_kepler.columns:
+    #    print(column, ": ", pd.unique(copy_kepler[column]), "\n")
+
+    # NOTE: These are the columns that have string values
+    # Exoplanet Archive Disposition
+    # Disposition Using Kepler Data
+    # Parameters Provenance
+    # Quarters
+    # Stellar Parameter Provenance
+        
+    # create a label encoder that will change string values into numerical values
+    label_encoder = LabelEncoder()
+
+    # change the string values in these columns and print their unique numerical values
+    copy_kepler['Exoplanet Archive Disposition'] = label_encoder.fit_transform(copy_kepler['Exoplanet Archive Disposition'])
+    copy_kepler['Disposition Using Kepler Data'] = label_encoder.fit_transform(copy_kepler['Disposition Using Kepler Data'])
+    copy_kepler['Parameters Provenance'] = label_encoder.fit_transform(copy_kepler['Parameters Provenance'])
+    copy_kepler['Quarters'] = label_encoder.fit_transform(copy_kepler['Quarters'])
+    copy_kepler['Stellar Parameter Provenance'] = label_encoder.fit_transform(copy_kepler['Stellar Parameter Provenance'])
+
+    #print("Exoplanet Archive Disposition: ", pd.unique(copy_kepler['Exoplanet Archive Disposition']), "\n")
+    #print("Disposition Using Kepler Data: ", pd.unique(copy_kepler['Disposition Using Kepler Data']), "\n")
+    #print("Parameters Provenance: ", pd.unique(copy_kepler['Parameters Provenance']), "\n")
+    #print("Quarters: ", pd.unique(copy_kepler['Quarters']), "\n")
+    #print("Stellar Parameter Provenance: ", pd.unique(copy_kepler['Stellar Parameter Provenance']), "\n")
+
+    # replace the NaN values with the mean values of their respective columns
     for column in copy_kepler.columns:
-        print(column, ": ", pd.unique(copy_kepler[column]), "\n")
+        if copy_kepler[column].isnull().values.any() == True:
+            #copy_kepler[column].fillna(copy_kepler[column].mean(), inplace = True)
+            copy_kepler.fillna({column: copy_kepler[column].mean()}, inplace = True)
+            #copy_kepler.fillna({column: copy_kepler[column].median()}, inplace = True)
+            #copy_kepler.fillna({column: 0}, inplace = True)
+            
+    # check which columns have null values
+    #print("Number of NaN values per column:\n", copy_kepler.isnull().sum(), "\n")
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Exoplanet Archive Disposition']), "\n")
+    # plot the dataset
+    copy_kepler.hist(figsize = (20, 20))
+    #plt.show()
 
-    # set strings to numerical values
-    copy_kepler['Exoplanet Archive Disposition'] = copy_kepler['Exoplanet Archive Disposition'].apply(lambda i: 0 if i == 'CONFIRMED' else 1 if i == 'CANDIDATE' else 2)
+    # save dataset into CSV file
+    #copy_kepler.to_csv("edited.csv")
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Exoplanet Archive Disposition']), "\n")
+    # split the data set into X and y matrices
+    X = copy_kepler.iloc[:, copy_kepler.columns != "Exoplanet Archive Disposition"].values
+    y = copy_kepler["Exoplanet Archive Disposition"].values     # take the outcome column
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Disposition Using Kepler Data']), "\n")
+    # return X and y
+    return X, y
 
-    # set strings to numerical values
-    copy_kepler['Disposition Using Kepler Data'] = copy_kepler['Disposition Using Kepler Data'].apply(lambda i: 0 if i == 'CANDIDATE' else 1)
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Disposition Using Kepler Data']), "\n")
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Parameters Provenance']), "\n")
+# read the Kepler Exoplanet 2018 Dataset, preprocess the data, and split the data into features and targets
+def extract_kepler_2018_data():
+    # load in the kepler exoplanet dataset
+    #kepler_exoplanet_dataset = pd.read_csv('cumulative_2024.02.18_16.53.59.csv', on_bad_lines = 'skip')
+    kepler_exoplanet_dataset = pd.read_csv('exoplanets_2018.csv')
 
-    # set strings to numerical values
-    copy_kepler['Parameters Provenance'] = copy_kepler['Parameters Provenance'].apply(lambda i: 0 if i == 'q1_q17_dr25_koi' else 1 if i == 'q1_q16_koi' else 2)
+    # copy the dataset just in case we mess with any data
+    copy_kepler = kepler_exoplanet_dataset.copy(deep = True)
 
-    # see the different values in this column
-    #print(pd.unique(copy_kepler['Parameters Provenance']), "\n")
+    # rename the columns in the dataset
+    copy_kepler = copy_kepler.rename(columns =
+        {
+            'kepid'                 : 'KepID',
+            'kepoi_name'            : 'KOI Name',
+            'kepler_name'           : 'Kepler Name',
+            'koi_disposition'       : 'Exoplanet Archive Disposition',
+            'koi_pdisposition'      : 'Disposition Using Kepler Data',
+            'koi_score'             : 'Disposition Score',
+            'koi_fpflag_nt'         : 'Not Transit-Like False Positive Flag',
+            'koi_fpflag_ss'         : 'Stellar Eclipse False Positive Flag',
+            'koi_fpflag_co'         : 'Centroid Offset False Positive Flag',
+            'koi_fpflag_ec'         : 'Ephemeris Match Indicates Contamination False Positive Flag',
+            'koi_period'            : 'Orbital Period [days]',
+            'koi_period_err1'       : 'Orbital Period Upper Unc. [days]',
+            'koi_period_err2'       : 'Orbital Period Lower Unc. [days]',
+            'koi_time0bk'           : 'Transit Epoch [BKJD]',
+            'koi_time0bk_err1'      : 'Transit Epoch Upper Unc. [BKJD]',
+            'koi_time0bk_err2'      : 'Transit Epoch Lower Unc. [BKJD]',
+            'koi_impact'            : 'Impact Parameter',
+            'koi_impact_err1'       : 'Impact Parameter Upper Unc.',
+            'koi_impact_err2'       : 'Impact Parameter Lower Unc.',
+            'koi_duration'          : 'Transit Duration [hrs]',
+            'koi_duration_err1'     : 'Transit Duration Upper Unc. [hrs]',
+            'koi_duration_err2'     : 'Transit Duration Lower Unc. [hrs]',
+            'koi_depth'             : 'Transit Depth [ppm]',
+            'koi_depth_err1'        : 'Transit Depth Upper Unc. [ppm]',
+            'koi_depth_err2'        : 'Transit Depth Lower Unc. [ppm]',
+            'koi_prad'              : 'Planetary Radius [Earth radii]',
+            'koi_prad_err1'         : 'Planetary Radius Upper Unc. [Earth radii]',
+            'koi_prad_err2'         : 'Planetary Radius Lower Unc. [Earth radii]',
+            'koi_teq'               : 'Equilibrium Temperature [K]',
+            'koi_teq_err1'          : 'Equilibrium Temperature Upper Unc. [K]',
+            'koi_teq_err2'          : 'Equilibrium Temperature Lower Unc. [K]',
+            'koi_insol'             : 'Insolation Flux [Earth flux]',
+            'koi_insol_err1'        : 'Insolation Flux Upper Unc. [Earth flux]',
+            'koi_insol_err2'        : 'Insolation Flux Lower Unc. [Earth flux]',
+            'koi_model_snr'         : 'Transit Signal-to-Noise',
+            'koi_tce_plnt_num'      : 'TCE Planet Number',
+            'koi_tce_delivname'     : 'TCE Delivery',
+            'koi_steff'             : 'Stellar Effective Temperature [K]',
+            'koi_steff_err1'        : 'Stellar Effective Temperature Upper Unc. [K]',
+            'koi_steff_err2'        : 'Stellar Effective Temperature Lower Unc. [K]',
+            'koi_slogg'             : 'Stellar Surface Gravity [log10(cm/s**2)]',
+            'koi_slogg_err1'        : 'Stellar Surface Gravity Upper Unc. [log10(cm/s**2)]',
+            'koi_slogg_err2'        : 'Stellar Surface Gravity Lower Unc. [log10(cm/s**2)]',
+            'koi_srad'              : 'Stellar Radius [Solar radii]',
+            'koi_srad_err1'         : 'Stellar Radius Upper Unc. [Solar radii]',
+            'koi_srad_err2'         : 'Stellar Radius Lower Unc. [Solar radii]',
+            'ra'                    : 'RA [decimal degrees]',
+            'dec'                   : 'Dec [decimal degrees]',
+            'koi_kepmag'            : 'Kepler-band [mag]',
+        })
 
-    return
+    #copy_kepler.info()
 
-extract_data()
+    # check which columns have null values
+    #print("\n")
+    #print("Number of NaN values per column:\n", copy_kepler.isnull().sum(), "\n")
+
+    # remove these columns as they either have too many null values or dont hold any significance
+    copy_kepler.drop(columns = ['KepID', 'KOI Name', 'Kepler Name', 'Equilibrium Temperature Upper Unc. [K]', 'Equilibrium Temperature Lower Unc. [K]', 'TCE Planet Number', 'TCE Delivery'], inplace = True)
+
+    # drop rows that contain NaN values
+    #copy_kepler.dropna(inplace = True)
+
+    # replace the NaN values with the mean values of their respective columns
+    for column in copy_kepler.columns:
+        if copy_kepler[column].isnull().values.any() == True:
+            #copy_kepler[column].fillna(copy_kepler[column].mean(), inplace = True)
+            copy_kepler.fillna({column: copy_kepler[column].mean()}, inplace = True)
+            #copy_kepler.fillna({column: copy_kepler[column].median()}, inplace = True)
+            #copy_kepler.fillna({column: copy_kepler[column].mode()}, inplace = True)
+            #copy_kepler.fillna({column: 0}, inplace = True)
+       
+    # check which columns have null values
+    #print("\n")
+    #print("Number of NaN values per column:\n", copy_kepler.isnull().sum(), "\n")
+
+    # create a label encoder that will change string values into numerical values
+    label_encoder = LabelEncoder()
+
+    # change the string values in these columns and print their unique numerical values
+    copy_kepler['Exoplanet Archive Disposition'] = label_encoder.fit_transform(copy_kepler['Exoplanet Archive Disposition'])
+    copy_kepler['Disposition Using Kepler Data'] = label_encoder.fit_transform(copy_kepler['Disposition Using Kepler Data'])
+    #print("Exoplanet Archive Disposition: ", pd.unique(copy_kepler['Exoplanet Archive Disposition']), "\n")
+    #print("Disposition Using Kepler Data: ", pd.unique(copy_kepler['Disposition Using Kepler Data']), "\n")
+
+    # copy the dataset again to get rid of the candidate columns
+    second_copy_kepler = copy_kepler.copy(deep = True)
+    second_copy_kepler.drop(columns = ['Exoplanet Archive Disposition', 'Disposition Using Kepler Data'], inplace = True)
+
+    # save dataset into CSV file
+    #second_copy_kepler.to_csv("qwe.csv")
+
+    # split the data set into X and y matrices
+    X = second_copy_kepler.values
+    y = copy_kepler["Disposition Using Kepler Data"].values      # take the outcome column
+
+    # return X and y
+    return X, y
+
+
+
+# split and standardize the dataset into training and testing datasets
+def split_and_std(X, y):
+    # split the dataset into training and testing data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 0)
+
+    # standardize the training and testing data
+    sc = StandardScaler()
+    sc.fit(X_train)
+    X_train = sc.transform(X_train)
+    X_test = sc.transform(X_test)
+
+    # return the splitted and standardized data
+    return X_train, X_test, y_train, y_test
+
+
+
+# split and standardize the dataset into training and testing datasets
+def split_and_std_k_fold(X, y, train_index, test_index):
+    # split the dataset into training and testing data using the given indices
+    X_train = X[train_index]
+    X_test = X[test_index]
+    y_train = y[train_index]
+    y_test = y[test_index]
+
+    # standardize the training and testing data
+    sc = StandardScaler()
+    sc.fit(X_train)
+    X_train = sc.transform(X_train)
+    X_test = sc.transform(X_test)
+
+    # return the splitted and standardized data
+    return X_train, X_test, y_train, y_test
+
+
+
+def evaluation(y_true, y_pred):
+    
+    # Print Accuracy, Recall, F1 Score, and Precision metrics.
+    print('Evaluation Metrics:')
+    print('Accuracy: ' + str(metrics.accuracy_score(y_true, y_pred)))
+    print('Recall: ' + str(metrics.recall_score(y_true, y_pred)))
+    print('F1 Score: ' + str(metrics.f1_score(y_true, y_pred)))
+    print('Precision: ' + str(metrics.precision_score(y_true, y_pred)))
+    
+    # Print Confusion Matrix
+    print('\nConfusion Matrix:')
+    print(' TN,  FP, FN, TP')
+    print(confusion_matrix(y_true, y_pred).ravel())
